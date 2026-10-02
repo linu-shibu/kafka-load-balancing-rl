@@ -12,11 +12,11 @@ EPISODE_LENGTH = 100
 def load_trained_policy():
     env = KafkaLoadBalancingEnv(num_brokers=NUM_BROKERS, episode_length=EPISODE_LENGTH)
     env = DummyVecEnv([lambda: env])
-    env = VecNormalize.load("../models/vecnormalize_v1.pk1", env)
+    env = VecNormalize.load("../models/vecnormalize_v3.pkl", env)
     env.training = False
     env.norm_reward = False
 
-    model = PPO.load("../models/kafka_ppo_v2")
+    model = PPO.load("../models/kafka_ppo_v3")
     return model, env
  
 def round_robin_policy(env, obs):

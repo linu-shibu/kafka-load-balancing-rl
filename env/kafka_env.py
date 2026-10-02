@@ -10,7 +10,7 @@ class KafkaLoadBalancingEnv(gym.Env):
 
         self.action_space = spaces.Discrete(num_brokers)
 
-        obs_dim = num_brokers + num_brokers + num_brokers + num_brokers + 1
+        obs_dim = num_brokers * 5 + 1
         self.observation_space = spaces.Box(
             low=0.0, high=np.inf, shape=(obs_dim,), dtype=np.float32
         )
@@ -25,6 +25,8 @@ class KafkaLoadBalancingEnv(gym.Env):
 
         self.spike_remaining = np.zeros(self.num_brokers, dtype=np.int32)
         self.spike_multiplier = np.ones(self.num_brokers, dtype=np.float32)
+        self.spike_duration = np.zeros(self.num_brokers, dtype=np.int32)
+        self.spike_peak = np.zeros(self.num_brokers, dtype=np.float32)
 
         self.current_step = 0
         self.incoming_partition_load, self.incoming_broker_hint = self._generate_partition_load()
@@ -34,32 +36,44 @@ class KafkaLoadBalancingEnv(gym.Env):
         return observation, info
     
     def _generate_partition_load(self):
+        self.previous_broker_baseline = self.broker_baseline.copy()
+        
         drift = self.np_random.normal(0,0.1,size=self.num_brokers)
         self.broker_baseline = np.clip(self.broker_baseline+drift, 1.0,20.0)
 
         spike_prob = 0.02
-
         for i in range(self.num_brokers):
             if self.spike_remaining[i] == 0 and self.np_random.random() < spike_prob:
-                self.spike_remaining[i] = self.np_random.integers(3,8)
-                self.spike_multiplier[i] = self.np_random.uniform(5.0,10.0)
-        
-        active_spike_brokers = self.spike_remaining > 0
-        self.spike_remaining[active_spike_brokers]-=1
+                duration = self.np_random.integers(6,12)
+                self.spike_remaining[i] = duration
+                self.spike_duration[i] = duration
+                self.spike_peak[i] = self.np_random.uniform(5.0,10.0)
+
+        for i in range(self.num_brokers):
+            if self.spike_remaining[i] > 0:
+                progress = 1.0 - (self.spike_remaining[i] / self.spike_duration[i])
+                self.spike_multiplier[i] = 1.0 + (self.spike_peak[i] - 1.0) * np.sin(np.pi * progress)
+            else:
+                self.spike_multiplier[i] = 1.0
+
+        self.spike_remaining[self.spike_remaining > 0] -= 1
+
 
         target_broker = self.np_random.integers(0, self.num_brokers)
         base = self.broker_baseline[target_broker]
-        multiplier = self.spike_multiplier[target_broker] if self.spike_remaining[target_broker] > 0 else 1.0
+        multiplier = self.spike_multiplier[target_broker]
         load = base * multiplier + self.np_random.normal(0, 0.5)
         load = max(load, 0.5)
 
         return load, target_broker
 
     def _get_obs(self):
+        baseline_delta = self.broker_baseline - self.previous_broker_baseline
         return np.concatenate([
             self.broker_loads,
             self.broker_partition_counts,
             self.broker_baseline,
+            baseline_delta,
             self.spike_remaining.astype(np.float32),
             [self.incoming_partition_load]
         ]).astype(np.float32)

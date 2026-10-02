@@ -19,6 +19,6 @@ model = PPO(
 
 model.learn(total_timesteps=300_000)
 
-model.save("../models/kafka_ppo_v2")
-env.save("../models/vecnormalize_v2.pk1")
-print("Training complete. Model saved to models/kafka_ppo_v2")
+model.save("../models/kafka_ppo_v3")
+env.save("../models/vecnormalize_v3.pkl")
+print("Training complete. Model saved to models/kafka_ppo_v3")
